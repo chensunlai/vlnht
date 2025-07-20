@@ -1,6 +1,7 @@
-habitat-lab
-NaVILA
 model
 runs
 data
+cache
+tmp
+*.ipynb
 .vscode
