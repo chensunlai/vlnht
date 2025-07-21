@@ -22,8 +22,9 @@ class NaVILAAgent(habitat.Agent):
 
         self.task_name = "{}-{}".format(self._env.current_episode.scene_id.split(
             "/")[-2], self._env.current_episode.episode_id)
-        self.log_path = os.path.join("runs", self.task_name, "log.jsonlines")
+        self.log_path = os.path.join("runs", self.task_name, "log.jsonl")
         self.img_path = os.path.join("runs", self.task_name, "images")
+        self.realtime_image_path = os.path.join("runs", "realtime.jpg")
         if not os.path.exists(os.path.join("runs", self.task_name)):
             os.makedirs(self.img_path)
 
@@ -53,20 +54,26 @@ class NaVILAAgent(habitat.Agent):
         if not self.actque.empty():
             return self.actque.get()
 
-        ret, buf = cv2.imencode(".jpg", cv2.cvtColor(
-            observations["rgb"], cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 95])
+        img = cv2.cvtColor(observations["rgb"], cv2.COLOR_RGB2BGR)
+        ret, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 95])
         img_bytes = buf.tobytes()
         image_idx = self.upload_image(self.task_id, img_bytes)
         text = self.infer(self.task_id, observations['instruction']['text'])
 
-        cv2.imwrite(os.path.join(self.img_path, f"{image_idx}.jpg"), cv2.cvtColor(
-            observations["rgb"], cv2.COLOR_RGB2BGR))
+        result = {
+            "image": f"image/{image_idx}.jpg",
+            "instruct": observations['instruction']['text'],
+            "response": text,
+            "goal": self._env.current_episode.goals[0].position,
+            "now": self._env.sim.get_agent_state().position.tolist(),
+            "metrics": self._env.get_metrics()
+        }
+
+        cv2.imwrite(os.path.join(self.img_path, f"{image_idx}.jpg"), img)
+        cv2.imwrite(self.realtime_image_path, img)
+
         with open(self.log_path, "a+") as fp:
-            fp.write(json.dumps({
-                "image": f"image/{image_idx}.jpg",
-                "instruct": observations['instruction']['text'],
-                "response": text
-            }, ensure_ascii=False))
+            fp.write(json.dumps(result, ensure_ascii=False) + "\n")
 
         text = text.lower()
         if "left" in text:
@@ -86,7 +93,7 @@ class NaVILAAgent(habitat.Agent):
 
     def EpisodeOverCallback(self, metrics):
         with open(self.log_path, "a+") as fp:
-            fp.write(json.dumps(metrics, ensure_ascii=False))
+            fp.write(json.dumps(metrics, ensure_ascii=False) + "\n")
 
 
 def main():
