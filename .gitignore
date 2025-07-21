@@ -5,3 +5,9 @@ cache
 tmp
 *.ipynb
 .vscode
+
+*/__pycache__/*
+
+habitat-lab
+StreamVLN
+NaVILA
