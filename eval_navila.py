@@ -7,6 +7,7 @@ import argparse
 import queue
 import requests
 import habitat_extensions
+from utils.benchmark import Benchmark
 
 SERVER_URL = "http://10.82.1.223:18880"
 
@@ -23,6 +24,7 @@ class NaVILAAgent(habitat.Agent):
         self.task_name = "{}-{}".format(self._env.current_episode.scene_id.split(
             "/")[-2], self._env.current_episode.episode_id)
         self.log_path = os.path.join("runs", self.task_name, "log.jsonl")
+        self.result_path = os.path.join("runs", self.task_name, "result.json")
         self.img_path = os.path.join("runs", self.task_name, "images")
         self.realtime_image_path = os.path.join("runs", "realtime.jpg")
         if not os.path.exists(os.path.join("runs", self.task_name)):
@@ -75,25 +77,30 @@ class NaVILAAgent(habitat.Agent):
         with open(self.log_path, "a+") as fp:
             fp.write(json.dumps(result, ensure_ascii=False) + "\n")
 
-        text = text.lower()
-        if "left" in text:
-            [self.actque.put({"action": HabitatSimActions.turn_left})
-             for i in range(round(float(text.split()[-2])/15))]
-        elif "right" in text:
-            [self.actque.put({"action": HabitatSimActions.turn_right})
-             for i in range(round(float(text.split()[-2])/15))]
-        elif "forward" in text:
-            [self.actque.put({"action": HabitatSimActions.move_forward})
-             for i in range(round(float(text.split()[-2])/25))]
+        for _ in range(4):
+            try:
+                text = text.lower()
+                if "left" in text:
+                    [self.actque.put({"action": HabitatSimActions.turn_left})
+                    for i in range(round(float(text.split()[-2])/15))]
+                elif "right" in text:
+                    [self.actque.put({"action": HabitatSimActions.turn_right})
+                    for i in range(round(float(text.split()[-2])/15))]
+                elif "forward" in text:
+                    [self.actque.put({"action": HabitatSimActions.move_forward})
+                    for i in range(round(float(text.split()[-2])/25))]
 
-        if not self.actque.empty():
-            return self.actque.get()
-
+                if not self.actque.empty():
+                    return self.actque.get()
+                break
+            except:
+                self.actque.queue.clear()
+        
         return {"action": HabitatSimActions.stop}
 
     def EpisodeOverCallback(self, metrics):
-        with open(self.log_path, "a+") as fp:
-            fp.write(json.dumps(metrics, ensure_ascii=False) + "\n")
+        with open(self.result_path, "a+") as fp:
+            fp.write(json.dumps(metrics, ensure_ascii=False, indent=2) + "\n")
 
 
 def main():
@@ -106,9 +113,9 @@ def main():
     args = parser.parse_args()
 
     agent = NaVILAAgent()
-    benchmark = habitat.Benchmark(args.task_config)
+    benchmark = Benchmark(args.task_config)
     agent._env = benchmark._env
-    metrics = benchmark.evaluate(agent, num_episodes=100)
+    metrics = benchmark.evaluate(agent)
 
     for k, v in metrics.items():
         print("{}: {:.3f}".format(k, v))
